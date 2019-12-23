@@ -128,10 +128,10 @@ class piCamBot:
         threads.append(telegram_thread)
 
         # set up watch thread for captured images
-        image_watch_thread = threading.Thread(target=self.fetchImageUpdates, name="Image watch")
-        image_watch_thread.daemon = True
-        image_watch_thread.start()
-        threads.append(image_watch_thread)
+#        image_watch_thread = threading.Thread(target=self.fetchImageUpdates, name="Image watch")
+#        image_watch_thread.daemon = True
+#        image_watch_thread.start()
+#        threads.append(image_watch_thread)
 
         # set up PIR thread
         if self.config['pir']['enable']:
