@@ -201,13 +201,9 @@ class piCamBot:
         elif cmd == '/status':
             self.commandStatus(message)
         elif cmd == '/capture':
-            # if motion software is running we have to stop and restart it for capturing images
-            stopStart = self.isMotionRunning()
-            if stopStart:
-                self.commandDisarm(message)
             self.commandCapture(message)
-            if stopStart:
-                self.commandArm(message)
+            self.commandArm(message)
+            
         else:
             self.logger.warn('Unknown command: "%s"' % message.text)
 
