@@ -254,10 +254,10 @@ class piCamBot:
         message.reply_text('Capture in progress, please wait...')
 
         capture_file = self.config['capture']['file']
-        if sys.version_info[0] == 2: # yay! python 2 vs 3 unicode fuckup
-            capture_file = capture_file.encode('utf-8')
-        if os.path.exists(capture_file):
-            os.remove(capture_file)
+        #if sys.version_info[0] == 2: # yay! python 2 vs 3 unicode fuckup
+        #    capture_file = capture_file.encode('utf-8')
+        #if os.path.exists(capture_file):
+        #    os.remove(capture_file)
 
         args = shlex.split(self.config['capture']['cmd'])
         try:
@@ -282,12 +282,13 @@ class piCamBot:
         # set up image directory watch
         watch_dir = self.config['general']['image_dir']
         # purge (remove and re-create) if we allowed to do so
-        if self.config['general']['delete_images']:
-            shutil.rmtree(watch_dir, ignore_errors=True)
-        if not os.path.exists(watch_dir):
-            os.makedirs(watch_dir) # racy but we don't care
+        #if self.config['general']['delete_images']:
+        #    shutil.rmtree(watch_dir, ignore_errors=True)
+        #if not os.path.exists(watch_dir):
+        #    os.makedirs(watch_dir) # racy but we don't care
         notify = inotify.adapters.Inotify()
-        notify.add_watch(watch_dir.encode('utf-8'))
+        #notify.add_watch(watch_dir.encode('utf-8'))
+        notify.add_watch(watch_dir)
 
         # check for new events
         # (runs forever but we could bail out: check for event being None
@@ -304,9 +305,9 @@ class piCamBot:
                 continue
 
             # check for image
-            if sys.version_info[0] == 3: # yay! python 2 vs 3 unicode fuckup
-                watch_path = watch_path.decode()
-                filename = filename.decode()
+            #if sys.version_info[0] == 3: # yay! python 2 vs 3 unicode fuckup
+            #    watch_path = watch_path.decode()
+            #    filename = filename.decode()
             filepath = ('%s/%s' % (watch_path, filename))
 
             if not filename.endswith('.jpg'):
