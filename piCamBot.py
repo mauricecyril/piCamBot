@@ -127,12 +127,6 @@ class piCamBot:
         telegram_thread.start()
         threads.append(telegram_thread)
 
-        # set up watch thread for captured images
-#        image_watch_thread = threading.Thread(target=self.fetchImageUpdates, name="Image watch")
-#        image_watch_thread.daemon = True
-#        image_watch_thread.start()
-#        threads.append(image_watch_thread)
-
         # set up PIR thread
         if self.config['pir']['enable']:
             pir_thread = threading.Thread(target=self.watchPIR, name="PIR")
@@ -278,7 +272,7 @@ class piCamBot:
             os.remove(capture_file)
 
 
-    def watchPIR(self, message):
+    def watchPIR(self):
         self.logger.info('Setting up PIR watch thread')
 
         gpio = self.config['pir']['gpio']
@@ -297,7 +291,6 @@ class piCamBot:
                 continue
 
             self.logger.info('PIR: motion detected')
-            message.reply_text('Motion tetected Capture in progress, please wait...')
             capture_file = self.config['capture']['file']
             
             args = shlex.split(self.config['capture']['cmd'])
@@ -306,15 +299,12 @@ class piCamBot:
             except Exception as e:
                 self.logger.warn(str(e))
                 self.logger.warn(traceback.format_exc())
-                message.reply_text('Error: Capture failed: %s' % str(e))
                 return
 
             if not os.path.exists(capture_file):
-                message.reply_text('Error: Capture file not found: "%s"' % capture_file)
                 return
         
             message.reply_photo(photo=open(capture_file, 'rb'))
-            if self.config['general']['delete_images']:
                 os.remove(capture_file)            
             
 
