@@ -237,6 +237,10 @@ class piCamBot:
             return
 
     def commandStatus(self, message):
+        if self.armed:
+            message.reply_text('Motion-based capturing already enabled! Nothing to do.')
+            return        
+        
         if not self.armed:
             message.reply_text('Motion-based capturing not enabled.')
             return
