@@ -278,7 +278,7 @@ class piCamBot:
             os.remove(capture_file)
 
 
-    def watchPIR(self):
+    def watchPIR(self, message):
         self.logger.info('Setting up PIR watch thread')
 
         gpio = self.config['pir']['gpio']
