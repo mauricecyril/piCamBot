@@ -67,13 +67,9 @@ class piCamBot:
             self.logger.error(traceback.format_exc())
             self.logger.error("Could not parse config file")
             sys.exit(1)
-        # check for conflicting config options
-        if self.config['pir']['enable'] and self.config['motion']['enable']:
-            self.logger.error('Enabling both PIR and motion based capturing is not supported')
-            sys.exit(1)
 
         # check if we need GPIO support
-        if self.config['buzzer']['enable'] or self.config['pir']['enable']:
+        if self.config['pir']['enable']:
             self.GPIO = importlib.import_module('RPi.GPIO')
 
         # register signal handler, needs config to be initialized
@@ -121,12 +117,7 @@ class piCamBot:
         except IndexError:
             self.update_id = None
 
-        # set up buzzer if configured
-        if self.config['buzzer']['enable']:
-            gpio = self.config['buzzer']['gpio']
-            self.GPIO.setmode(self.GPIO.BOARD)
-            self.GPIO.setup(gpio, self.GPIO.OUT)
-
+ 
         threads = []
 
         # set up telegram thread
@@ -184,7 +175,7 @@ class piCamBot:
                     # skip messages from non-owner
                     if message.from_user.id not in self.config['telegram']['owner_ids']:
                         self.logger.warn('Received message from unknown user "%s": "%s"' % (message.from_user, message.text))
-                        message.reply_text("I'm sorry, Dave. I'm afraid I can't do that.")
+                        message.reply_text("I'm sorry, I dont' know you. I'm afraid I can't do that.")
                         continue
 
                     self.logger.info('Received message from user "%s": "%s"' % (message.from_user, message.text))
@@ -231,40 +222,13 @@ class piCamBot:
 
         message.reply_text('Enabling motion-based capturing...')
 
-        if self.config['buzzer']['enable']:
-            buzzer_sequence = self.config['buzzer']['seq_arm']
-            if len(buzzer_sequence) > 0:
-                self.playSequence(buzzer_sequence)
-
         self.armed = True
 
         if not self.config['motion']['enable']:
             # we are done, PIR-mode needs no further steps
             return
 
-        # start motion software if not already running
-        if self.isMotionRunning():
-            message.reply_text('Motion software already running.')
-            return
-
-        args = shlex.split(self.config['motion']['cmd'])
-        try:
-            subprocess.call(args)
-        except Exception as e:
-            self.logger.warn(str(e))
-            self.logger.warn(traceback.format_exc())
-            message.reply_text('Error: Failed to start motion software: %s' % str(e))
-            return
-
-        # wait until motion is running to prevent
-        # multiple start and wrong status reports
-        for i in range(10):
-            if self.isMotionRunning():
-                message.reply_text('Motion software now running.')
-                return
-            time.sleep(1)
-        message.reply_text('Motion software still not running. Please check status later.')
-
+       
     def commandDisarm(self, message):
         if not self.armed:
             message.reply_text('Motion-based capturing not enabled! Nothing to do.')
@@ -272,67 +236,9 @@ class piCamBot:
 
         message.reply_text('Disabling motion-based capturing...')
 
-        if self.config['buzzer']['enable']:
-            buzzer_sequence = self.config['buzzer']['seq_disarm']
-            if len(buzzer_sequence) > 0:
-                self.playSequence(buzzer_sequence)
-
-        self.armed = False
-
         if not self.config['motion']['enable']:
             # we are done, PIR-mode needs no further steps
             return
-
-        pid = self.getMotionPID()
-        if pid is None:
-            message.reply_text('No PID file found. Assuming motion software not running. If in doubt use "kill".')
-            return
-
-        if not os.path.exists('/proc/%s' % pid):
-            message.reply_text('PID found but no corresponding proc entry. Removing PID file.')
-            os.remove(self.config['motion']['pid_file'])
-            return
-
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            # ingore if already gone
-            pass
-        # wait for process to terminate, can take some time
-        for i in range(10):
-            if not os.path.exists('/proc/%s' % pid):
-                message.reply_text('Motion software has been stopped.')
-                return
-            time.sleep(1)
-        
-        message.reply_text("Could not terminate process. Trying to kill it...")
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            # ignore if already gone
-            pass
-
-        # wait for process to terminate, can take some time
-        for i in range(10):
-            if not os.path.exists('/proc/%s' % pid):
-                message.reply_text('Motion software has been stopped.')
-                return
-            time.sleep(1)
-        message.reply_text('Error: Unable to stop motion software.')
-
-    def commandKill(self, message):
-        if not self.config['motion']['enable']:
-            message.reply_text('Error: kill command only supported when motion is enabled')
-            return
-        args = shlex.split('killall -9 %s' % self.config['motion']['kill_name'])
-        try:
-            subprocess.call(args)
-        except Exception as e:
-            self.logger.warn(str(e))
-            self.logger.warn(traceback.format_exc())
-            message.reply_text('Error: Failed to send kill signal: %s' % str(e))
-            return
-        message.reply_text('Kill signal has been sent.')
 
     def commandStatus(self, message):
         if not self.armed:
@@ -343,23 +249,9 @@ class piCamBot:
         if not os.path.exists(image_dir):
             message.reply_text('Error: Motion-based capturing enabled but image dir not available!')
             return
-     
-        if self.config['motion']['enable']:
-            # check if motion software is running or died unexpectedly
-            if not self.isMotionRunning():
-                message.reply_text('Error: Motion-based capturing enabled but motion software not running!')
-                return
-            message.reply_text('Motion-based capturing enabled and motion software running.')
-        else:
-            message.reply_text('Motion-based capturing enabled.')
 
     def commandCapture(self, message):
         message.reply_text('Capture in progress, please wait...')
-
-        if self.config['buzzer']['enable']:
-            buzzer_sequence = self.config['buzzer']['seq_capture']
-            if len(buzzer_sequence) > 0:
-                self.playSequence(buzzer_sequence)
 
         capture_file = self.config['capture']['file']
         if sys.version_info[0] == 2: # yay! python 2 vs 3 unicode fuckup
@@ -434,23 +326,9 @@ class piCamBot:
             if self.config['general']['delete_images']:
                 os.remove(filepath)
 
-    def getMotionPID(self):
-        pid_file = self.config['motion']['pid_file']
-        if not os.path.exists(pid_file):
-            return None
-        with open(pid_file, 'r') as f:
-            pid = f.read().rstrip()
-        return int(pid)
-
-    def isMotionRunning(self):
-        pid = self.getMotionPID()
-        return os.path.exists('/proc/%s' % pid)
 
     def watchPIR(self):
         self.logger.info('Setting up PIR watch thread')
-
-        if self.config['buzzer']['enable']:
-            buzzer_sequence = self.config['buzzer']['seq_motion']
 
         gpio = self.config['pir']['gpio']
         self.GPIO.setmode(self.GPIO.BOARD)
@@ -468,8 +346,7 @@ class piCamBot:
                 continue
 
             self.logger.info('PIR: motion detected')
-            if self.config['buzzer']['enable'] and len(buzzer_sequence) > 0:
-                self.playSequence(buzzer_sequence)
+         
             args = shlex.split(self.config['pir']['capture_cmd'])
 
             try:
@@ -479,26 +356,8 @@ class piCamBot:
                 self.logger.warn(traceback.format_exc())
                 message.reply_text('Error: Capture failed: %s' % str(e))
 
-    def playSequence(self, sequence):
-        gpio = self.config['buzzer']['gpio']
-        duration = self.config['buzzer']['duration']
-        for i in sequence:
-            if i == '1':
-                self.GPIO.output(gpio, 1)
-            elif i == '0':
-                self.GPIO.output(gpio, 0)
-            else:
-                self.logger.warnprint('unknown pattern in sequence: %s', i)
-            time.sleep(duration)
-        self.GPIO.output(gpio, 0)
 
     def signalHandler(self, signal, frame):
-        # always disable buzzer
-        if self.config['buzzer']['enable']:
-            gpio = self.config['buzzer']['gpio']
-            self.GPIO.output(gpio, 0)
-            self.GPIO.cleanup()
-
         msg = 'Caught signal %d, terminating now.' % signal
         self.logger.error(msg)
         for owner_id in self.config['telegram']['owner_ids']:
