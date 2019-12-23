@@ -316,12 +316,7 @@ class piCamBot:
             
             # always delete image, even if reporting is disabled
             if self.config['general']['delete_images']:
-                os.remove(filepath)
-
-
-            message.reply_photo(photo=open(capture_file, 'rb'))
                 os.remove(capture_file)            
-            
 
     def signalHandler(self, signal, frame):
         msg = 'Caught signal %d, terminating now.' % signal
