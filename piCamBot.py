@@ -291,33 +291,9 @@ class piCamBot:
                 continue
 
             self.logger.info('PIR: motion detected')
-            capture_file = self.config['capture']['file']
-            
-            if self.armed:
-                for owner_id in self.config['telegram']['owner_ids']:
-                    try:
-                        self.bot.sendPhoto(chat_id=owner_id, photo=open(capture_file))
-                    except Exception as e:
-                        # most likely network problem or user has blocked the bot
-                        self.logger.warn('Could not send image to user %s: %s' % (owner_id, str(e)))
-
-
-            args = shlex.split(self.config['capture']['cmd'])
-            try:
-                subprocess.call(args)
-            except Exception as e:
-                self.logger.warn(str(e))
-                self.logger.warn(traceback.format_exc())
-                return
-
-            if not os.path.exists(capture_file):
-                return
-        
-            
-            # always delete image, even if reporting is disabled
-            if self.config['general']['delete_images']:
-                os.remove(capture_file)            
-
+            self.commandCapture(message)
+            self.commandArm(message)            
+          
     def signalHandler(self, signal, frame):
         msg = 'Caught signal %d, terminating now.' % signal
         self.logger.error(msg)
