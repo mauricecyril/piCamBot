@@ -14,6 +14,7 @@
 #
 
 import importlib
+import inotify
 import inotify.adapters
 import json
 import logging
@@ -276,57 +277,6 @@ class piCamBot:
         if self.config['general']['delete_images']:
             os.remove(capture_file)
 
-    def fetchImageUpdates(self):
-        self.logger.info('Setting up image watch thread')
-
-        # set up image directory watch
-        watch_dir = self.config['general']['image_dir']
-        # purge (remove and re-create) if we allowed to do so
-        #if self.config['general']['delete_images']:
-        #    shutil.rmtree(watch_dir, ignore_errors=True)
-        #if not os.path.exists(watch_dir):
-        #    os.makedirs(watch_dir) # racy but we don't care
-        notify = inotify.adapters.Inotify()
-        #notify.add_watch(watch_dir.encode('utf-8'))
-        notify.add_watch(watch_dir)
-
-        # check for new events
-        # (runs forever but we could bail out: check for event being None
-        #  which always indicates the last event)
-        for event in notify.event_gen():
-            if event is None:
-                continue
-
-            (header, type_names, watch_path, filename) = event
-
-            # only watch for created and renamed files
-            matched_types = ['IN_CLOSE_WRITE', 'IN_MOVED_TO']
-            if not any(type in type_names for type in matched_types):
-                continue
-
-            # check for image
-            #if sys.version_info[0] == 3: # yay! python 2 vs 3 unicode fuckup
-            #    watch_path = watch_path.decode()
-            #    filename = filename.decode()
-            filepath = ('%s/%s' % (watch_path, filename))
-
-            if not filename.endswith('.jpg'):
-                self.logger.info('New non-image file: "%s" - ignored' % filepath)
-                continue
-
-            self.logger.info('New image file: "%s"' % filepath)
-            if self.armed:
-                for owner_id in self.config['telegram']['owner_ids']:
-                    try:
-                        self.bot.sendPhoto(chat_id=owner_id, caption=filepath, photo=open(filepath, 'rb'))
-                    except Exception as e:
-                        # most likely network problem or user has blocked the bot
-                        self.logger.warn('Could not send image to user %s: %s' % (owner_id, str(e)))
-
-            # always delete image, even if reporting is disabled
-            if self.config['general']['delete_images']:
-                os.remove(filepath)
-
 
     def watchPIR(self):
         self.logger.info('Setting up PIR watch thread')
@@ -347,16 +297,26 @@ class piCamBot:
                 continue
 
             self.logger.info('PIR: motion detected')
-         
-            args = shlex.split(self.config['pir']['capture_cmd'])
-
+            message.reply_text('Motion tetected Capture in progress, please wait...')
+            capture_file = self.config['capture']['file']
+            
+            args = shlex.split(self.config['capture']['cmd'])
             try:
                 subprocess.call(args)
             except Exception as e:
                 self.logger.warn(str(e))
                 self.logger.warn(traceback.format_exc())
                 message.reply_text('Error: Capture failed: %s' % str(e))
+                return
 
+            if not os.path.exists(capture_file):
+                message.reply_text('Error: Capture file not found: "%s"' % capture_file)
+                return
+        
+            message.reply_photo(photo=open(capture_file, 'rb'))
+            if self.config['general']['delete_images']:
+                os.remove(capture_file)            
+            
 
     def signalHandler(self, signal, frame):
         msg = 'Caught signal %d, terminating now.' % signal
